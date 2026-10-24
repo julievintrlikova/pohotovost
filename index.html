@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="cs"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#24424f"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Pohotovost"><link rel="apple-touch-icon" href="icon-192.png"><link rel="icon" href="icon-192.png"><title>Pohotovost 1–10</title>
+<style>
+:root{--bg:#dfe9ee;color-scheme:light}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#10181d;color-scheme:dark}}
+html,body{height:100%;margin:0;background:var(--bg);overflow:hidden;touch-action:none}
+body{display:flex;align-items:center;justify-content:center;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box}
+canvas{height:100%;max-width:100%;aspect-ratio:360/640;display:block;touch-action:none}
+</style></head><body>
+<canvas id="c" width="360" height="640"></canvas>
+<script>
+const cv=document.getElementById('c'),g=cv.getContext('2d'),W=360,H=640,F='system-ui,-apple-system,Segoe UI,Roboto,sans-serif';
+const R=["Ordinace","Převazy","Rentgen","Ortopedie","Interna","Chirurgie","Kardiologie","JIP","Operační sál","Neurochirurgie"];
+const S=[0,["Odřené koleno","Rýma a kašel","Bolest hlavy"],["Zvrtnutý kotník","Řezná rána prstu","Vysoká teplota"],["Podezření na zlomeninu","Zlomený nos","Hluboká rána na ruce"],["Zlomená ruka","Vykloubené rameno","Silné krvácení z nohy"],["Zánět slepého střeva","Otrava jídlem","Ledvinová kolika"],["Otevřená zlomenina","Střelné zranění ruky","Perforace žaludku"],["Bolest na hrudi","Srdeční arytmie","Plicní embolie"],["Infarkt myokardu","Těžký astmatický záchvat","Těžká alergická reakce"],["Vnitřní krvácení po nehodě","Rozsáhlé popáleniny","Prasklá aorta"],["Krvácení do mozku","Těžké poranění hlavy","Mozková mrtvice"]];
+const K=[0,'tap','trace','order','time','hold','trace','mash','tap','trace','hold'];
+const CF=[0,{N:6,L:2,d:0},{amp:60,tol:30,lim:2,hz:0},{N:6,T:6.5},{N:5,sp:1.4,w:.15},{N:6,r:46,sp:.9,lim:2.2},{amp:80,tol:19,lim:1.5,hz:1},{N:5,lim:2.6},{N:14,L:.85,d:0,fx:1},{amp:90,tol:14,lim:1.2,hz:2},{N:9,r:26,sp:1.7,lim:1.2}];
+const TU=[0,
+["Čištění rány","Na ráně naskakují zelené bublinky nečistot.","Klepni na každou dřív, než zmizí.","Očisti 6 bublinek. Při 3 chybách zákrok selže."],
+["Převaz","Obvaz musíš ovinout po vlnovce na ruce.","Přilož prst na zelený start a veď ho po světlém pruhu až k cíli.","Nevyjížděj z pruhu, jinak se obvaz sesune."],
+["Rentgen","Na snímku svítí očíslované body.","Klepej na ně popořadě od 1 do konce, než vyprší čas.","Špatné číslo je chyba. Po 3 chybách nebo vypršení času zákrok selže."],
+["Ortopedie","Kost musíš srovnat do správné polohy.","Klepni, když je lišta v zeleném poli. Pole je užší a lišta rychlejší.","Srovnej 5×. Při 3 chybách zákrok selže."],
+["Interna","Ultrazvukovou sondou musíš sledovat pohyblivé místo v těle.","Drž prst na zeleném kruhu a jdi za ním, kam se pohne.","Na kruhu musíš vydržet několik sekund. Mimo kruh se hromadí chyba."],
+["Šití rány","Jehla musí vést přesně po lince rány.","Veď prst po pruhu od zeleného startu do cíle.","Pruh je užší, chybovat smíš jen chvilku."],
+["Defibrilace","Nabíjíš přístroj, ale energie neustále klesá.","Klepej rychle, aby ukazatel zůstal v zeleném pásmu. Nepřebij ho!","Vydrž v pásmu 5 sekund. Mimo pásmo se hromadí chyba."],
+["Resuscitace","Masáž srdce musí mít rytmus.","Klepej doprostřed hrudníku, až se zmenšující kruh splyne s terčem.","Zvládni 14 stlačení. Klepnout moc brzy je chyba."],
+["Operace","Řez veď přesně po vyznačené lince.","Vyhýbej se pulzující cévě (červený kruh).","Pruh je úzký a chyba se trestá rychle."],
+["Neurochirurgie","Nejjemnější zákrok: sleduj malý rychlý bod.","Drž prst na kruhu a nepusť ho ani na chvíli. Je malý a rychlý.","Mimo kruh se chyba hromadí velmi rychle."]];
+const rooms=[];for(let i=0;i<10;i++){const c=i<5?0:1,r=i%5;rooms.push({n:i+1,x:c?184:8,y:58+r*68,w:168,h:62,f:0,fc:''})}
+const hue=l=>130-(l-1)*14,sx=i=>60+(i%3)*120,sy=i=>548+(i/3|0)*62;
+let st='menu',score=0,best=0,lives=3,t=0,T=0,sp=0,pats=[],sel=null,msg='',msgT=0,last=0,treated=0,mg=null,seen={};
+const skins=['#f1c9a5','#e0a97d','#c68a5c','#8d5a3b'],hairs=['#2b1d12','#6b4423','#b58b3a','#222','#999'];
+const cap=()=>Math.min(10,2+Math.floor(treated*.8));
+function reset(){score=0;lives=3;t=0;sp=1;pats=[];sel=null;msg='';treated=0;mg=null;rooms.forEach(r=>r.f=0);st='play'}
+function spawn(){
+  const u=pats.map(p=>p.slot);let s=-1;for(let i=0;i<6;i++)if(!u.includes(i)){s=i;break}
+  if(s<0)return;
+  let l=1+Math.floor(Math.pow(Math.random(),.7)*10);if(Math.random()<.25)l=8+Math.floor(Math.random()*3);
+  const a=S[l];
+  pats.push({x:W+30,y:sy(s),slot:s,lvl:l,sym:a[Math.random()*a.length|0],bpm:Math.round(62+l*9+Math.random()*10),pat:1,max:70-l*3,s:'wait',skin:skins[Math.random()*4|0],hair:hairs[Math.random()*5|0],ph:Math.random()*6,tgt:null});
+}
+function say(m){msg=m;msgT=2.5}
+function over(){st='over';best=Math.max(best,score)}
+function update(dt){
+  t+=dt;sp-=dt;
+  if(sp<=0){spawn();sp=Math.max(3.5,10-t/20)}
+  for(const p of pats){
+    if(p.s=='wait'){
+      p.y+=(sy(p.slot)-p.y)*Math.min(1,dt*4);p.x+=(sx(p.slot)-p.x)*Math.min(1,dt*4);
+      p.pat-=dt/p.max;
+      if(p.pat<=0){p.s='gone';lives--;say('Pacient čekal příliš dlouho!');if(sel===p)sel=null;if(lives<=0)over()}
+    }else if(p.s=='walk'){
+      const r=p.tgt,tx=r.x+r.w/2,ty=r.y+r.h-2,dx=tx-p.x,dy=ty-p.y,d=Math.hypot(dx,dy),v=75*dt;
+      p.ph+=dt*9;
+      if(d<=v){
+        if(p.lvl==r.n){p.s='treating';startMg(r.n,p)}
+        else{p.s='wait';p.pat=Math.max(.05,p.pat-.3);r.f=.8;r.fc='#e74c3c';say('Špatný sál! Pacient se vrací do čekárny.')}
+      }else{p.x+=dx/d*v;p.y+=dy/d*v}
+    }
+  }
+  pats=pats.filter(p=>p.s!='gone');
+  if(sel&&!pats.includes(sel))sel=null;
+  rooms.forEach(r=>{if(r.f>0)r.f-=dt});
+  if(msgT>0)msgT-=dt;
+}
+/* ---------- minigames ---------- */
+function startMg(n,p){
+  const c=CF[n],m={n,p,k:K[n],c,tut:!seen[n],errs:0,hits:0,res:null,dn:false,fx:0,fy:0};
+  if(m.k=='trace'){m.pts=[];for(let i=0;i<=70;i++){const u=i/70;let x=180+c.amp*Math.sin(u*9.42+n)+(n>=9?c.amp*.4*Math.sin(u*19.5):0);m.pts.push({x:Math.max(45,Math.min(315,x)),y:110+u*410})}m.prog=0;m.off=0;m.eng=0}
+  if(m.k=='time'){m.zc=.25+Math.random()*.5;m.fl=0}
+  if(m.k=='tap'){m.tg=null;m.gap=.5}
+  if(m.k=='order'){m.nx=1;m.tl=c.T;m.dots=[];while(m.dots.length<c.N){const d={x:55+Math.random()*250,y:130+Math.random()*340};if(m.dots.every(o=>Math.hypot(o.x-d.x,o.y-d.y)>66))m.dots.push(d)}}
+  if(m.k=='hold'){m.off=0;m.eng=0}
+  if(m.k=='mash'){m.v=.7;m.off=0}
+  mg=m;st='mg';sel=null;
+}
+const mark=()=>{const ph=(T*mg.c.sp)%2;return ph<1?ph:2-ph};
+const hz=(m,i)=>{const P=m.pts,q=P[Math.floor((P.length-1)*(.3+.35*i))];return{x:q.x+Math.sin(T*2+i*2)*(m.c.tol+14),y:q.y,r:14}};
+const hp=m=>({x:180+Math.sin(T*m.c.sp*1.3)*110,y:300+Math.sin(T*m.c.sp*1.9+1)*150});
+function endMg(ok){if(mg.res)return;const m=mg;m.res={ok,q:Math.max(0,1-(m.c.lim?m.off/m.c.lim:m.errs/3))}}
+function upMg(dt){
+  const m=mg,c=m.c;if(m.tut||m.res)return;
+  if(m.k=='tap'){
+    if(m.tg){m.tg.a+=dt;if(m.tg.a>=c.L){if(m.tg.good)m.errs++;m.tg=null;m.gap=.35}}
+    else{m.gap-=dt;if(m.gap<=0)m.tg={x:c.fx?180:55+Math.random()*250,y:c.fx?300:130+Math.random()*340,a:0,good:Math.random()>=c.d}}
+  }
+  if(m.k=='time')m.fl=Math.max(0,m.fl-dt);
+  if(m.k=='order'){m.tl-=dt;if(m.tl<=0)endMg(false)}
+  if(m.k=='hold'){if(m.dn)m.eng=1;if(m.eng){const q=hp(m);if(m.dn&&Math.hypot(m.fx-q.x,m.fy-q.y)<c.r)m.hits+=dt;else m.off+=dt;if(m.off>c.lim)endMg(false)}}
+  if(m.k=='mash'){m.v=Math.max(0,m.v-dt*.24);if(m.v>=.55&&m.v<=.8)m.hits+=dt;else m.off+=dt;if(m.off>c.lim)endMg(false)}
+  if(m.k=='trace'){
+    const P=m.pts;
+    if(m.dn){
+      if(!m.eng){if(Math.hypot(m.fx-P[0].x,m.fy-P[0].y)<c.tol*1.6)m.eng=1}
+      else{
+        let ok=false;const p0=m.prog;
+        for(let j=p0;j<Math.min(P.length,p0+11);j++)if(Math.hypot(m.fx-P[j].x,m.fy-P[j].y)<c.tol){m.prog=j;ok=true}
+        if(!ok&&Math.hypot(m.fx-P[m.prog].x,m.fy-P[m.prog].y)>c.tol*1.15)m.off+=dt;
+        for(let i=0;i<c.hz;i++){const h=hz(m,i);if(Math.hypot(m.fx-h.x,m.fy-h.y)<h.r+4)m.off+=dt*2}
+      }
+    }
+    if(m.off>c.lim)endMg(false);else if(m.prog>=P.length-2)endMg(true);
+  }
+  if(m.errs>=3)endMg(false);else if(m.k!='trace'&&m.hits>=c.N)endMg(true);
+}
+function leave(){
+  const m=mg,r=m.res;m.p.s='gone';
+  if(r.ok){const p=m.n*12+Math.round(r.q*m.n*8);score+=p;treated++;say('Pacient vyléčen! +'+p)}
+  else{lives--;say('Zákrok se nezdařil.');if(lives<=0){mg=null;over();return}}
+  mg=null;st='play';
+}
+function mgDown(x,y){
+  const m=mg;
+  if(m.tut){if(y>570&&y<625){m.tut=false;seen[m.n]=1}return}
+  if(m.res){leave();return}
+  m.fx=x;m.fy=y;
+  if(m.k=='trace'||m.k=='hold'){m.dn=true;return}
+  if(m.k=='mash'){m.v=Math.min(1,m.v+.11);return}
+  if(m.k=='order'){const j=m.dots.findIndex(d=>Math.hypot(x-d.x,y-d.y)<28);if(j>=0&&j+1>=m.nx){if(j+1==m.nx){m.hits++;m.nx++}else m.errs++}return}
+  if(m.k=='time'){const ok=Math.abs(mark()-m.zc)<=m.c.w/2;ok?m.hits++:m.errs++;m.fl=.3;m.fc=ok?'#2ecc71':'#e74c3c';m.zc=.2+Math.random()*.6;return}
+  if(m.tg&&Math.hypot(x-m.tg.x,y-m.tg.y)<38){
+    if(m.tg.good&&!(m.c.fx&&m.tg.a/m.c.L<.6))m.hits++;else m.errs++;
+    m.tg=null;m.gap=.3;
+  }
+}
+/* ---------- drawing ---------- */
+function rr(x,y,w,h,r){g.beginPath();g.roundRect(x,y,w,h,r)}
+function txt(s,x,y,sz,col,al,b){g.fillStyle=col;g.font=(b?'bold ':'')+sz+'px '+F;g.textAlign=al||'left';g.textBaseline='middle';g.fillText(s,x,y)}
+function wrap(s,x,y,w,sz,col){g.font=sz+'px '+F;let l='';for(const wd of s.split(' ')){const tt=l?l+' '+wd:wd;if(g.measureText(tt).width>w&&l){txt(l,x,y,sz,col);y+=sz+5;l=wd}else l=tt}txt(l,x,y,sz,col);return y+sz+7}
+function heart(x,y,on){g.fillStyle=on?'#e74c3c':'#b9c6cc';g.beginPath();g.moveTo(x,y+5);g.bezierCurveTo(x-12,y-4,x-5,y-12,x,y-5);g.bezierCurveTo(x+5,y-12,x+12,y-4,x,y+5);g.fill()}
+function circ(x,y,r){g.beginPath();g.arc(x,y,r,0,6.3)}
+function finger(x,y,p){g.fillStyle='rgba(255,255,255,.92)';circ(x,y,p?13:18);g.fill();g.strokeStyle='#1b7fd1';g.lineWidth=3;g.stroke()}
+function ecg(x,y,w,bpm){
+  g.strokeStyle='#2ecc71';g.lineWidth=1.5;g.beginPath();const s=bpm/60*2;
+  for(let i=0;i<=w;i++){const ph=((i/18)+T*s)%1;let v=0;if(ph>.4&&ph<.46)v=-12;else if(ph>=.46&&ph<.5)v=9;else if(ph>=.5&&ph<.54)v=-3;i?g.lineTo(x+i,y+v):g.moveTo(x,y)}g.stroke();
+}
+function drawRoom(r){
+  const c=`hsl(${hue(r.n)},55%,${r.n==10?38:55}%)`;
+  g.fillStyle='#f4f8fa';rr(r.x,r.y,r.w,r.h,8);g.fill();
+  g.fillStyle=c;rr(r.x,r.y,44,r.h,8);g.fill();g.fillRect(r.x+30,r.y,14,r.h);
+  txt(r.n,r.x+22,r.y+r.h/2+1,26,'#fff','center',1);
+  txt(R[r.n-1],r.x+52,r.y+18,13,'#24424f','left',1);
+  for(let i=0;i<10;i++){g.fillStyle=i<r.n?c:'#cfdbe1';g.fillRect(r.x+52+i*10.5,r.y+30,8,5)}
+  g.strokeStyle='#8aa3b0';g.lineWidth=2;const bx=r.x+52,by=r.y+42;
+  if(r.n>=8){g.fillStyle='#e74c3c';g.fillRect(bx,by+4,10,3);g.fillRect(bx+3.5,by,3,11)}
+  g.strokeRect(bx+16,by+2,34,10);g.beginPath();g.moveTo(bx+16,by+12);g.lineTo(bx+16,by+16);g.moveTo(bx+50,by+12);g.lineTo(bx+50,by+16);g.stroke();
+  if(r.n>=5){circ(bx+68,by+7,6);g.stroke()}
+  if(r.n>=9){g.fillStyle='#ffd54a';circ(bx+90,by+3,5);g.fill()}
+  g.fillStyle='#7a5c3e';g.fillRect(r.x+r.w/2+4,r.y+r.h-5,20,5);
+  if(r.f>0){g.globalAlpha=Math.min(1,r.f);g.fillStyle=r.fc;rr(r.x,r.y,r.w,r.h,8);g.fill();g.globalAlpha=1}
+  g.strokeStyle='#b7c7cf';g.lineWidth=1.5;rr(r.x,r.y,r.w,r.h,8);g.stroke();
+}
+function drawPat(p){
+  const x=p.x,y=p.y,sw=p.s=='walk'?Math.sin(p.ph)*5:0;
+  g.fillStyle='rgba(0,0,0,.18)';g.beginPath();g.ellipse(x,y+26,15,5,0,0,6.3);g.fill();
+  g.strokeStyle='#3b4a6b';g.lineWidth=5;g.lineCap='round';
+  g.beginPath();g.moveTo(x-5,y+10);g.lineTo(x-5+sw,y+24);g.moveTo(x+5,y+10);g.lineTo(x+5-sw,y+24);g.stroke();
+  g.fillStyle='#fff';rr(x-12,y-14,24,28,7);g.fill();g.strokeStyle='#c9d4da';g.lineWidth=1;g.stroke();
+  g.fillStyle='#8ec5e6';g.fillRect(x-12,y-2,24,5);
+  g.strokeStyle=p.skin;g.lineWidth=4;g.beginPath();g.moveTo(x-12,y-8);g.lineTo(x-16-sw/2,y+6);g.moveTo(x+12,y-8);g.lineTo(x+16+sw/2,y+6);g.stroke();
+  g.fillStyle=p.skin;circ(x,y-26,12);g.fill();
+  g.fillStyle=p.hair;g.beginPath();g.arc(x,y-29,12,3.3,6.1);g.fill();
+  g.fillStyle='#222';circ(x-4,y-26,1.5);g.fill();circ(x+4,y-26,1.5);g.fill();
+  g.strokeStyle='#222';g.lineWidth=1.3;g.beginPath();if(p.lvl>=6)g.arc(x,y-18,3,3.5,5.9);else g.arc(x,y-21,3,.3,2.9);g.stroke();
+  if(p.lvl>=3){g.fillStyle='#fff';g.fillRect(x-10,y-34,20,5);g.fillStyle='#e74c3c';g.fillRect(x-1,y-34,2,5)}
+  if(p.lvl>=5){g.fillStyle='#c0392b';circ(x+8,y+2,3+p.lvl*.25);g.fill()}
+  if(p.lvl>=8){g.strokeStyle='#e74c3c';g.lineWidth=2;circ(x,y-26,17);g.stroke()}
+  if(p.s=='wait'){
+    g.strokeStyle='rgba(0,0,0,.15)';g.lineWidth=4;g.beginPath();g.arc(x,y-26,19,-1.57,4.71);g.stroke();
+    g.strokeStyle=p.pat>.5?'#2ecc71':p.pat>.25?'#f39c12':'#e74c3c';g.beginPath();g.arc(x,y-26,19,-1.57,-1.57+6.28*p.pat);g.stroke();
+  }
+  if(p===sel){g.strokeStyle='#1b7fd1';g.lineWidth=3;g.setLineDash([5,4]);circ(x,y-4,34);g.stroke();g.setLineDash([])}
+}
+function drawHall(){
+  g.fillStyle='#e9f1f4';g.fillRect(0,0,W,H);
+  g.fillStyle='#24424f';g.fillRect(0,0,W,50);
+  g.fillStyle='#fff';g.fillRect(14,19,16,5);g.fillRect(19.5,13.5,5,16);
+  txt('POHOTOVOST',38,17,15,'#fff','left',1);txt('Vyléčeno: '+treated+' · sály 1–10 otevřené',38,36,11,'#9fc3d4');
+  txt(score,W-12,17,20,'#fff','right',1);for(let i=0;i<3;i++)heart(W-60+i*20,38,i<lives);
+  rooms.forEach(drawRoom);
+  g.fillStyle='#d1dde3';g.fillRect(0,404,W,84);
+  g.fillStyle='#fff';rr(8,410,W-16,76,10);g.fill();g.strokeStyle='#b7c7cf';g.lineWidth=1.5;g.stroke();
+  if(sel){txt(sel.sym,18,430,16,'#24424f','left',1);txt('Tep: '+sel.bpm+' /min',18,452,12,'#60808f');ecg(18,472,W-40,sel.bpm);txt('Klepni na sál 1–10',W-18,452,11,'#60808f','right')}
+  else txt('Klepni na pacienta, sám dojde na správný sál',W/2,448,14,'#60808f','center');
+  // čekárna
+  g.fillStyle='#d9c9ad';g.fillRect(0,512,W,H-512);
+  g.strokeStyle='rgba(0,0,0,.06)';g.lineWidth=1;for(let y=530;y<H;y+=22){g.beginPath();g.moveTo(0,y);g.lineTo(W,y);g.stroke()}
+  g.fillStyle='#b8d0da';g.fillRect(0,488,W,24);txt('ČEKÁRNA',W/2,500,13,'#24424f','center',1);
+  for(let i=0;i<6;i++){const x=sx(i),y=sy(i);g.fillStyle='#3b6a91';rr(x-20,y-12,40,28,6);g.fill();g.fillStyle='#4a7fa8';rr(x-24,y+10,48,14,5);g.fill();g.fillStyle='#2c4f6b';g.fillRect(x-20,y+22,4,10);g.fillRect(x+16,y+22,4,10)}
+  g.fillStyle='#7a5c3e';g.fillRect(338,528,12,14);g.fillStyle='#3f9b5b';circ(344,520,12);g.fill();
+  pats.filter(p=>p.s!='treating').sort((a,b)=>a.y-b.y).forEach(drawPat);
+  if(msgT>0){g.globalAlpha=Math.min(1,msgT);g.fillStyle='rgba(36,66,79,.94)';rr(20,490,W-40,28,14);g.fill();txt(msg,W/2,504,13,'#fff','center',1);g.globalAlpha=1}
+}
+function drawMg(){
+  const m=mg,n=m.n,c=m.c;
+  g.fillStyle='#dfe9ee';g.fillRect(0,0,W,H);
+  g.fillStyle=`hsl(${hue(n)},50%,${n==10?32:45}%)`;g.fillRect(0,0,W,56);
+  txt('Sál '+n+' · '+R[n-1],14,18,16,'#fff','left',1);
+  for(let i=0;i<10;i++){g.fillStyle=i<n?'#fff':'rgba(255,255,255,.3)';g.fillRect(14+i*13,34,10,6)}
+  txt(m.p.sym,W-12,38,11,'#fff','right');
+  g.fillStyle=m.p.skin;rr(30,76,300,470,60);g.fill();
+  if(m.k=='order'){m.dots.forEach((d,i)=>{if(i+1<m.nx)return;g.fillStyle=i+1==m.nx?'#1b7fd1':'#24424f';circ(d.x,d.y,22);g.fill();txt(i+1,d.x,d.y+1,18,'#fff','center',1)});g.fillStyle='#b9c6cc';g.fillRect(40,556,280,8);g.fillStyle='#1b7fd1';g.fillRect(40,556,280*Math.max(0,m.tl/c.T),8)}
+  if(m.k=='hold'){const q=hp(m),on=m.dn&&Math.hypot(m.fx-q.x,m.fy-q.y)<c.r;g.fillStyle=on?'rgba(46,204,113,.9)':'rgba(46,204,113,.45)';circ(q.x,q.y,c.r);g.fill();g.strokeStyle='#fff';g.lineWidth=3;g.stroke();if(m.dn){g.fillStyle='#1b7fd1';circ(m.fx,m.fy,8);g.fill()}}
+  if(m.k=='mash'){g.fillStyle='#fff';rr(140,100,80,400,12);g.fill();g.fillStyle='#2ecc71';g.fillRect(140,500-.8*400,80,.25*400);const yy=500-m.v*400;g.fillStyle=m.v>=.55&&m.v<=.8?'#1b7fd1':'#e74c3c';g.fillRect(132,yy-5,96,10);txt('KLEPEJ RYCHLE!',180,525,16,'#24424f','center',1)}
+  if(n==1){g.fillStyle='#b03a2e';g.beginPath();g.ellipse(180,300,70,16,.3,0,6.3);g.fill()}
+  if(n==8){g.strokeStyle='rgba(0,0,0,.25)';g.lineWidth=3;circ(180,300,26);g.stroke();g.fillStyle='rgba(176,58,46,.5)';g.fillRect(172,284,16,32);g.fillRect(164,292,32,16)}
+  if(m.k=='tap'){
+    if(m.tg){const q=m.tg,k=q.a/c.L;g.fillStyle=q.good?'rgba(46,204,113,.9)':'rgba(231,76,60,.9)';circ(q.x,q.y,26);g.fill();g.strokeStyle='#fff';g.lineWidth=3;circ(q.x,q.y,26+70*(1-k));g.stroke()}
+  }
+  if(m.k=='time'){
+    const bx=40,bw=280,by=290;g.fillStyle='#fff';rr(bx,by,bw,28,8);g.fill();
+    g.fillStyle='#2ecc71';g.fillRect(bx+(m.zc-c.w/2)*bw,by,c.w*bw,28);
+    g.fillStyle='#24424f';g.fillRect(bx+mark()*bw-3,by-8,6,44);
+    if(m.fl>0){g.globalAlpha=Math.min(1,m.fl*3);g.fillStyle=m.fc;rr(bx,by,bw,28,8);g.fill();g.globalAlpha=1}
+    g.fillStyle='#24424f';circ(180,470,48);g.fill();txt('KLEP',180,470,22,'#fff','center',1);
+  }
+  if(m.k=='trace'){
+    const P=m.pts;g.lineCap='round';g.lineJoin='round';
+    const path=(a,b)=>{g.beginPath();for(let i=a;i<=b;i++)i==a?g.moveTo(P[i].x,P[i].y):g.lineTo(P[i].x,P[i].y)};
+    path(0,70);g.strokeStyle='rgba(255,255,255,.6)';g.lineWidth=c.tol*2;g.stroke();
+    g.setLineDash([6,8]);g.strokeStyle='#7a8f99';g.lineWidth=2;g.stroke();g.setLineDash([]);
+    if(m.prog>0){path(0,m.prog);g.strokeStyle=n==2?'#fff':n==6?'#3b2a1d':'#c0392b';g.lineWidth=8;g.stroke()}
+    g.fillStyle='#2ecc71';circ(P[0].x,P[0].y,12);g.fill();g.fillStyle='#ffd54a';circ(P[70].x,P[70].y,12);g.fill();
+    for(let i=0;i<c.hz;i++){const h=hz(m,i);g.fillStyle='rgba(231,76,60,.85)';circ(h.x,h.y,h.r);g.fill()}
+    if(m.dn){g.fillStyle='#1b7fd1';circ(m.fx,m.fy,8);g.fill()}
+  }
+  if(!m.tut&&!m.res){
+    for(let i=0;i<3;i++){g.fillStyle=(c.lim?m.off/c.lim>(i+1)/3:m.errs>i)?'#e74c3c':'#b9c6cc';circ(40+i*26,600,9);g.fill()}
+    if(c.lim){g.fillStyle='#b9c6cc';g.fillRect(140,595,180,10);g.fillStyle='#e74c3c';g.fillRect(140,595,180*Math.min(1,m.off/c.lim),10)}
+    if(m.k!='trace')txt(Math.floor(m.hits)+' / '+c.N,W-20,c.lim?572:600,18,'#24424f','right',1);
+  }
+  if(m.tut){
+    const u=TU[n];
+    if(m.k=='trace'){const P=m.pts,i=Math.min(70,Math.floor(((T*.3)%1.15)*71));g.strokeStyle='#1b7fd1';g.lineWidth=5;g.beginPath();for(let j=0;j<=i;j++)j?g.lineTo(P[j].x,P[j].y):g.moveTo(P[0].x,P[0].y);g.stroke();finger(P[i].x,P[i].y,1)}
+    if(m.k=='tap'){const a=(T%1.4)/1.4,x=c.fx?180:180,y=c.fx?300:230;g.fillStyle='rgba(46,204,113,.9)';circ(x,y,26);g.fill();g.strokeStyle='#fff';g.lineWidth=3;circ(x,y,26+70*(1-a));g.stroke();finger(x+14,y+16,a>.85)}
+    if(m.k=='time'){finger(190,478+Math.sin(T*6)*6,Math.sin(T*6)>0)}
+    if(m.k=='order'){const d=m.dots[Math.floor(T)%m.c.N];finger(d.x+10,d.y+12,(T%1)>.7)}
+    if(m.k=='hold'){const q=hp(m);finger(q.x,q.y,1)}
+    if(m.k=='mash')finger(180,470+Math.sin(T*14)*8,Math.sin(T*14)>0)
+    g.fillStyle='rgba(20,40,50,.9)';rr(12,410,W-24,226,14);g.fill();
+    txt(u[0],26,432,18,'#fff','left',1);
+    let y=458;y=wrap(u[1],26,y,310,13,'#cfe3ec');y=wrap(u[2],26,y,310,13,'#9be6b4');wrap(u[3],26,y,310,12,'#9fc3d4');
+    g.fillStyle='#2ecc71';rr(100,578,160,44,22);g.fill();txt('ROZUMÍM',180,600,16,'#fff','center',1);
+  }
+  if(m.res){
+    g.fillStyle='rgba(20,40,50,.85)';g.fillRect(0,0,W,H);
+    txt(m.res.ok?'Zákrok se podařil!':'Zákrok se nezdařil',W/2,270,24,m.res.ok?'#9be6b4':'#ff8a80','center',1);
+    if(m.res.ok)txt('Kvalita: '+Math.round(m.res.q*100)+' %',W/2,310,16,'#ffd54a','center',1);
+    txt('Klepni pro pokračování',W/2,360,14,'#cfe3ec','center');
+  }
+}
+function draw(){
+  if(st=='mg'&&mg)drawMg();else drawHall();
+  if(st=='menu'||st=='over'){
+    g.fillStyle='rgba(20,40,50,.86)';g.fillRect(0,0,W,H);
+    g.fillStyle='#fff';g.fillRect(W/2-9,130,18,60);g.fillRect(W/2-30,151,60,18);
+    g.fillStyle='#e74c3c';g.fillRect(W/2-4,135,8,50);g.fillRect(W/2-25,156,50,8);
+    if(st=='menu'){
+      txt('POHOTOVOST',W/2,230,30,'#fff','center',1);
+      ['Ty jsi lékař. Ty rozhoduješ, kdo půjde dál.','Klepni na pacienta v čekárně, sám dojde na sál.','Sál 1 = lehké, sál 10 = nejtěžší.','Na sále zákrok provedeš sám,','v každém sále tě čeká krátký návod.','Špatný zákrok nebo dlouhé čekání = ztráta srdce.'].forEach((s,i)=>txt(s,W/2,275+i*24,13,'#cfe3ec','center'));
+    }else{txt('KONEC SMĚNY',W/2,230,28,'#fff','center',1);txt('Skóre: '+score,W/2,276,22,'#ffd54a','center',1);txt('Vyléčeno: '+treated+' · Rekord: '+best,W/2,306,15,'#cfe3ec','center')}
+    g.fillStyle='#2ecc71';rr(W/2-80,430,160,48,24);g.fill();txt(st=='menu'?'ZAČÍT':'HRÁT ZNOVU',W/2,455,16,'#fff','center',1);
+  }
+}
+function loop(ts){const dt=Math.min(.05,(ts-last)/1000||0);last=ts;T+=dt;if(st=='play')update(dt);else if(st=='mg'&&mg)upMg(dt);draw();requestAnimationFrame(loop)}
+const pt=e=>{const b=cv.getBoundingClientRect();return[(e.clientX-b.left)*W/b.width,(e.clientY-b.top)*H/b.height]};
+cv.addEventListener('pointerdown',e=>{
+  try{cv.setPointerCapture(e.pointerId)}catch(_){}
+  const[x,y]=pt(e);
+  if(st=='menu'||st=='over'){if(y>420&&y<490)reset();return}
+  if(st=='mg'&&mg){mgDown(x,y);return}
+  const hit=pats.filter(p=>p.s=='wait'&&Math.hypot(p.x-x,p.y-y+4)<38).sort((a,b)=>Math.hypot(a.x-x,a.y-y)-Math.hypot(b.x-x,b.y-y))[0];
+  if(hit){hit.s='walk';hit.tgt=rooms[hit.lvl-1];say('Jde na sál '+hit.lvl+' – '+R[hit.lvl-1]);return}
+  const r=rooms.find(r=>x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.h);
+  if(r)say('Klepni na pacienta v čekárně, na sál dojde sám.')
+});
+cv.addEventListener('pointermove',e=>{if(st=='mg'&&mg&&mg.dn){const p=pt(e);mg.fx=p[0];mg.fy=p[1]}});
+const up=()=>{if(mg)mg.dn=false};cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
+requestAnimationFrame(loop);
+</script><script>if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}))</script></body></html>
